@@ -4,20 +4,26 @@
 
     try {
         const standingsResponse = await fetch(standingsUrl);
+        if (!standingsResponse.ok) throw new Error(`Failed to fetch standings: ${standingsResponse.statusText}`);
         const standingsData = await standingsResponse.json();
+
+        if (!standingsData.standings || !standingsData.standings.results) {
+            throw new Error('Invalid standings data format');
+        }
+
         const entries = standingsData.standings.results;
 
         const historyPromises = entries.map(entry =>
             fetch(`https://fantasy.premierleague.com/api/entry/${entry.entry}/history/`)
-                .then(res => res.json())
-                .catch(err => null)
+                .then(res => res.ok ? res.json() : null)
+                .catch(() => null)
         );
 
         const histories = await Promise.all(historyPromises);
 
         let maxGw = 0;
         histories.forEach(h => {
-            if (h && h.current) {
+            if (h && Array.isArray(h.current)) {
                 const max = h.current.reduce((acc, curr) => Math.max(acc, curr.event), 0);
                 maxGw = Math.max(maxGw, max);
             }
@@ -28,7 +34,7 @@
             const gwResults = [];
             entries.forEach((entry, idx) => {
                 const history = histories[idx];
-                if (!history || !history.current) return;
+                if (!history || !Array.isArray(history.current)) return;
 
                 const gwRecord = history.current.find(item => item.event === gw);
                 if (gwRecord) {
